@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>貪吃蛇小遊戲</title>
+<style>
+:root{color-scheme:dark;--bg:#10151c;--panel:#19232d;--line:#2b3946;--green:#8ee36b;--mint:#b8ff8e;--text:#eff5ee;--muted:#a3b1b7;--orange:#ffbd69}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 0,#1c2c32,#10151c 65%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;place-items:center;padding:24px}
+main{width:min(100%,620px)}header{text-align:center;margin-bottom:20px}h1{font-size:clamp(2rem,7vw,3rem);letter-spacing:.08em;margin:0 0 6px}header p{margin:0;color:var(--muted)}
+.top{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px}.scorebox{display:flex;gap:10px}.badge,.status{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 14px}.badge span{color:var(--green);font-weight:800;font-variant-numeric:tabular-nums}.status{color:var(--muted);font-size:.9rem}
+.frame{position:relative;background:#0d1318;border:1px solid #354751;border-radius:18px;padding:12px;box-shadow:0 20px 60px #0006}canvas{display:block;width:100%;height:auto;aspect-ratio:1;border-radius:10px;background:#111a1e;touch-action:none}
+.overlay{position:absolute;inset:12px;display:grid;place-items:center;background:#0b1112b8;border-radius:10px;text-align:center;padding:20px}.overlay.hidden{display:none}.card{max-width:320px}.card h2{font-size:1.8rem;margin:0 0 8px}.card p{color:#c0cdca;margin:0 0 18px;line-height:1.6}
+button{border:0;border-radius:12px;background:var(--green);color:#142015;font:700 1rem inherit;font-weight:800;padding:12px 20px;cursor:pointer;transition:transform .12s,filter .12s}button:hover{filter:brightness(1.08);transform:translateY(-1px)}button:active{transform:translateY(1px)}
+.controls{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:14px}.help{color:var(--muted);font-size:.88rem;line-height:1.5}.pad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,40px);gap:5px}.pad button{padding:0;background:#263640;color:var(--text);border:1px solid #3b5059;font-size:1.05rem}.pad .up{grid-column:2}.pad .left{grid-column:1;grid-row:2}.pad .down{grid-column:2;grid-row:2}.pad .right{grid-column:3;grid-row:2}.foot{text-align:center;color:#728188;font-size:.76rem;margin-top:16px}
+@media(max-width:440px){body{padding:16px}.controls{align-items:flex-end}.help{max-width:180px}.badge,.status{padding:8px 10px;font-size:.85rem}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>貪吃蛇</h1><p>吃下果實，挑戰你的最高紀錄</p></header>
+<div class="top"><div class="scorebox"><div class="badge">分數　<span id="score">0</span></div><div class="badge">最高　<span id="best">0</span></div></div><div class="status" id="status">準備開始</div></div>
+<div class="frame"><canvas id="board" width="480" height="480" aria-label="貪吃蛇遊戲棋盤"></canvas><div class="overlay" id="overlay"><div class="card"><h2 id="overlayTitle">準備好了嗎？</h2><p id="overlayText">用方向鍵或 WASD 移動。吃果實得分，別撞到牆壁或自己！</p><button id="start">開始遊戲</button></div></div></div>
+<div class="controls"><div class="help">⌨️ 方向鍵 / WASD 移動<br>⏸️ 空白鍵暫停・手機可用按鈕</div><div class="pad" aria-label="方向控制"><button class="up" data-dir="up" aria-label="上">▲</button><button class="left" data-dir="left" aria-label="左">◀</button><button class="down" data-dir="down" aria-label="下">▼</button><button class="right" data-dir="right" aria-label="右">▶</button></div></div>
+<div class="foot">每吃到 5 顆果實，蛇的速度會稍微提升</div>
+</main>
+<script>
+(()=>{
+const canvas=document.querySelector('#board'),ctx=canvas.getContext('2d'),N=20,CELL=24;
+const scoreEl=document.querySelector('#score'),bestEl=document.querySelector('#best'),statusEl=document.querySelector('#status'),overlay=document.querySelector('#overlay'),titleEl=document.querySelector('#overlayTitle'),textEl=document.querySelector('#overlayText'),startBtn=document.querySelector('#start');
+let snake,dir,nextDir,food,score,best=Number(localStorage.getItem('snake-best')||0),timer=null,playing=false,paused=false;
+bestEl.textContent=best;
+const dirs={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+function rounded(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function draw(){ctx.clearRect(0,0,480,480);ctx.fillStyle='#111a1e';ctx.fillRect(0,0,480,480);ctx.strokeStyle='#ffffff08';ctx.lineWidth=1;for(let i=0;i<=N;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,480);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(480,i*CELL);ctx.stroke()}
+if(food){ctx.shadowColor='#ff9866';ctx.shadowBlur=14;ctx.fillStyle='#ff8968';rounded(food.x*CELL+5,food.y*CELL+5,14,14,7);ctx.shadowBlur=0;ctx.fillStyle='#c4f189';ctx.beginPath();ctx.ellipse(food.x*CELL+14,food.y*CELL+5,4,2.5,-.6,0,Math.PI*2);ctx.fill()}
+snake?.forEach((s,i)=>{ctx.fillStyle=i===0?'#b8ff8e':'#79d65c';ctx.shadowColor=i===0?'#8ee36b':'transparent';ctx.shadowBlur=i===0?9:0;rounded(s.x*CELL+2,s.y*CELL+2,CELL-4,CELL-4,i===0?8:6);ctx.shadowBlur=0;if(i===0){ctx.fillStyle='#17301b';const dx=dir.x,dy=dir.y;for(const side of [-1,1]){let ex=s.x*CELL+12+dx*5+(dy?side*5:0),ey=s.y*CELL+12+dy*5+(dx?side*5:0);ctx.beginPath();ctx.arc(ex,ey,1.7,0,Math.PI*2);ctx.fill()}}})}
+function placeFood(){let spots=[];for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!snake.some(s=>s.x===x&&s.y===y))spots.push({x,y});food=spots.length?spots[Math.floor(Math.random()*spots.length)]:null}
+function reset(){clearInterval(timer);snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];dir={...dirs.right};nextDir={...dir};score=0;scoreEl.textContent=score;playing=true;paused=false;placeFood();overlay.classList.add('hidden');statusEl.textContent='遊戲中';draw();schedule()}
+function schedule(){clearInterval(timer);timer=setInterval(tick,Math.max(75,145-Math.floor(score/5)*10))}
+function tick(){dir=nextDir;const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y},eats=food&&head.x===food.x&&head.y===food.y;const body=eats?snake:snake.slice(0,-1);if(head.x<0||head.x>=N||head.y<0||head.y>=N||body.some(s=>s.x===head.x&&s.y===head.y)){end();return}snake.unshift(head);if(eats){score++;scoreEl.textContent=score;if(score>best){best=score;bestEl.textContent=best;localStorage.setItem('snake-best',best)}placeFood();schedule()}else snake.pop();if(!food){win();return}draw()}
+function end(){clearInterval(timer);playing=false;statusEl.textContent='遊戲結束';titleEl.textContent='撞到了！';textEl.textContent=`這次得到 ${score} 分，再挑戰一次吧！`;startBtn.textContent='重新開始';overlay.classList.remove('hidden');draw()}
+function win(){clearInterval(timer);playing=false;statusEl.textContent='完美通關';titleEl.textContent='太厲害了！';textEl.textContent=`你吃光了所有果實，得到 ${score} 分！`;startBtn.textContent='再玩一次';overlay.classList.remove('hidden')}
+function setDirection(name){const d=dirs[name];if(!playing||!d)return;if(d.x===-dir.x&&d.y===-dir.y)return;nextDir=d}
+function togglePause(){if(!playing)return;paused=!paused;if(paused){clearInterval(timer);statusEl.textContent='已暫停';titleEl.textContent='先休息一下';textEl.textContent='按空白鍵或下方按鈕繼續遊戲。';startBtn.textContent='繼續遊戲';overlay.classList.remove('hidden')}else{overlay.classList.add('hidden');statusEl.textContent='遊戲中';schedule()}}
+startBtn.addEventListener('click',()=>paused?togglePause():reset());document.querySelectorAll('[data-dir]').forEach(b=>b.addEventListener('click',()=>setDirection(b.dataset.dir)));
+window.addEventListener('keydown',e=>{const map={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};if(map[e.key]){e.preventDefault();setDirection(map[e.key])}else if(e.code==='Space'){e.preventDefault();togglePause()}});
+let touchStart=null;canvas.addEventListener('touchstart',e=>{touchStart={x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}},{passive:true});canvas.addEventListener('touchend',e=>{if(!touchStart)return;const dx=e.changedTouches[0].clientX-touchStart.x,dy=e.changedTouches[0].clientY-touchStart.y;if(Math.max(Math.abs(dx),Math.abs(dy))>20)setDirection(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));touchStart=null},{passive:true});draw();
+})();
+</script>
+</body>
+</html>
